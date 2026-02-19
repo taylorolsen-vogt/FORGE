@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE v3 — STL Editor + AI Copilot</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111116;
+    --border: #1e1e28;
+    --accent: #e8ff47;
+    --accent2: #ff6b35;
+    --ai: #a78bfa;
+    --text: #e8e8f0;
+    --muted: #5a5a6e;
+    --panel: #0d0d12;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 48px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: 4px; color: var(--accent); }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .logo em { color: var(--ai); font-style: normal; font-size: 11px; letter-spacing: 2px; margin-left: 8px; vertical-align: middle; }
+
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  .btn {
+    font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    padding: 6px 14px; border: 1px solid var(--border); background: transparent;
+    color: var(--text); cursor: pointer; text-transform: uppercase; transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #0a0a0c; border-color: var(--accent); font-weight: 700; }
+  .btn-primary:hover { background: #fff; border-color: #fff; color: #0a0a0c; }
+  .btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,255,71,0.08); }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* TOOLBAR */
+  .toolbar {
+    width: 48px; background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 12px 0; gap: 4px; flex-shrink: 0;
+  }
+  .tool-btn {
+    width: 36px; height: 36px; border: 1px solid transparent; background: transparent;
+    color: var(--muted); cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: all 0.15s; font-size: 15px; position: relative;
+  }
+  .tool-btn:hover, .tool-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,255,71,0.05); }
+  .tool-btn .tooltip {
+    position: absolute; left: calc(100% + 10px); background: var(--surface);
+    border: 1px solid var(--border); color: var(--text); font-size: 10px;
+    padding: 4px 8px; white-space: nowrap; pointer-events: none; opacity: 0;
+    transition: opacity 0.1s; z-index: 200;
+  }
+  .tool-btn:hover .tooltip { opacity: 1; }
+  .tool-divider { width: 24px; height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* VIEWPORT */
+  #viewport { flex: 1; position: relative; overflow: hidden; }
+  #canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #canvas.orbit-mode { cursor: grab; }
+  #canvas.orbit-mode:active { cursor: grabbing; }
+  #canvas.sculpt-mode { cursor: none; }
+
+  #drop-zone {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; transition: opacity 0.3s; background: var(--bg); z-index: 10;
+  }
+  #drop-zone.hidden { opacity: 0; pointer-events: none; }
+  .drop-icon { width: 80px; height: 80px; border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--muted); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { border-color: var(--muted); color: var(--muted); } 50% { border-color: var(--accent); color: var(--accent); } }
+  .drop-text { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: 2px; }
+  .drop-sub { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+  .drop-browse { font-size: 11px; color: var(--accent); text-decoration: underline; cursor: pointer; letter-spacing: 1px; }
+
+  #drop-overlay {
+    position: absolute; inset: 0; background: rgba(232,255,71,0.04);
+    border: 2px dashed var(--accent); display: none; align-items: center;
+    justify-content: center; z-index: 50;
+    font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700;
+    color: var(--accent); letter-spacing: 4px;
+  }
+  #drop-overlay.active { display: flex; }
+
+  .mode-badge {
+    position: absolute; top: 12px; left: 12px; background: var(--panel);
+    border: 1px solid var(--border); font-size: 10px; letter-spacing: 2px;
+    padding: 4px 10px; color: var(--accent); text-transform: uppercase; pointer-events: none;
+  }
+
+  .viewport-info {
+    position: absolute; bottom: 12px; left: 12px; display: flex; gap: 16px;
+    font-size: 10px; color: var(--muted); letter-spacing: 1px; pointer-events: none;
+  }
+  .viewport-info span { color: var(--text); }
+
+  #axis-canvas { position: absolute; bottom: 36px; right: 12px; pointer-events: none; }
+
+  #loading {
+    position: absolute; inset: 0; background: rgba(10,10,12,0.85);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; z-index: 100;
+  }
+  #loading.active { display: flex; }
+  .loading-bar { width: 200px; height: 2px; background: var(--border); overflow: hidden; }
+  .loading-fill { height: 100%; background: var(--accent); animation: load 1.2s ease-in-out infinite; }
+  @keyframes load { 0% { transform: scaleX(0); transform-origin: left; } 50% { transform: scaleX(1); transform-origin: left; } 50.01% { transform: scaleX(1); transform-origin: right; } 100% { transform: scaleX(0); transform-origin: right; } }
+  .loading-text { font-size: 10px; letter-spacing: 3px; color: var(--accent); }
+
+  #sculpt-cursor {
+    position: absolute; border-radius: 50%; border: 1.5px solid rgba(232,255,71,0.7);
+    pointer-events: none; transform: translate(-50%,-50%); display: none;
+    box-shadow: 0 0 8px rgba(232,255,71,0.3);
+  }
+
+  /* AI thinking indicator in viewport */
+  #ai-thinking-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(167,139,250,0.12); border: 1px solid var(--ai);
+    color: var(--ai); font-size: 10px; letter-spacing: 2px;
+    padding: 4px 10px; display: none; align-items: center; gap: 6px;
+  }
+  #ai-thinking-badge.active { display: flex; }
+  .ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ai); animation: blink 0.8s ease-in-out infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+  /* RIGHT SIDE: split into props panel + ai panel */
+  .right-side {
+    width: 280px; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border); flex-shrink: 0;
+  }
+
+  /* PROPS PANEL (top, scrollable) */
+  .right-panel {
+    background: var(--panel); flex: 1;
+    overflow-y: auto; min-height: 0;
+  }
+
+  .panel-section { border-bottom: 1px solid var(--border); padding: 14px; }
+  .panel-title { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+  .prop-row { display: flex; align-items: center; margin-bottom: 10px; gap: 8px; }
+  .prop-label { font-size: 10px; color: var(--muted); width: 14px; text-align: center; flex-shrink: 0; }
+  .axis-x { color: #ff5555; } .axis-y { color: #55ff88; } .axis-z { color: #5599ff; }
+  .prop-input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-family: 'Space Mono', monospace; font-size: 10px;
+    padding: 5px 6px; text-align: right; min-width: 0; transition: border-color 0.15s;
+  }
+  .prop-input:focus { outline: none; border-color: var(--accent); }
+  .prop-group { margin-bottom: 4px; }
+  .prop-group-label { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+  .mesh-stat { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 6px; color: var(--muted); }
+  .mesh-stat span:last-child { color: var(--text); }
+
+  input[type="range"] { -webkit-appearance: none; width: 100%; height: 2px; background: var(--border); outline: none; margin: 6px 0; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); cursor: pointer; }
+
+  .range-row { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+  .range-val { color: var(--text); min-width: 34px; text-align: right; }
+  .color-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .color-swatch { width: 28px; height: 28px; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--panel); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* ── AI COPILOT PANEL ── */
+  .ai-panel {
+    height: 320px; flex-shrink: 0;
+    background: #0b0b10;
+    border-top: 1px solid var(--ai);
+    display: flex; flex-direction: column;
+  }
+
+  .ai-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(167,139,250,0.15);
+  }
+
+  .ai-title {
+    font-size: 9px; letter-spacing: 3px; color: var(--ai); text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .ai-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .ai-status-dot.connected { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+
+  .ai-key-toggle { font-size: 9px; color: var(--muted); cursor: pointer; letter-spacing: 1px; text-decoration: underline; }
+  .ai-key-toggle:hover { color: var(--ai); }
+
+  /* API key input row */
+  #api-key-row {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(167,139,250,0.1);
+    display: flex; gap: 6px;
+  }
+  #api-key-row.hidden { display: none; }
+
+  #api-key-input {
+    flex: 1; background: var(--surface); border: 1px solid rgba(167,139,250,0.3);
+    color: var(--text); font-family: 'Space Mono', monospace; font-size: 10px;
+    padding: 5px 8px; outline: none;
+  }
+  #api-key-input:focus { border-color: var(--ai); }
+  #api-key-input::placeholder { color: var(--muted); }
+
+  .btn-ai {
+    font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1px;
+    padding: 5px 10px; border: 1px solid rgba(167,139,250,0.4);
+    background: transparent; color: var(--ai); cursor: pointer; text-transform: uppercase;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-ai:hover { background: rgba(167,139,250,0.1); border-color: var(--ai); }
+
+  /* Chat messages */
+  #chat-messages {
+    flex: 1; overflow-y: auto; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 8px;
+    min-height: 0;
+  }
+
+  .msg {
+    font-size: 10px; line-height: 1.6; max-width: 100%;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg-user { color: var(--text); padding-left: 8px; border-left: 2px solid var(--accent); }
+  .msg-ai { color: #c4b5fd; padding-left: 8px; border-left: 2px solid var(--ai); }
+  .msg-exec { color: #4ade80; padding-left: 8px; border-left: 2px solid #4ade80; font-size: 9px; letter-spacing: 1px; }
+  .msg-err { color: var(--accent2); padding-left: 8px; border-left: 2px solid var(--accent2); }
+  .msg-system { color: var(--muted); font-size: 9px; text-align: center; }
+
+  .msg-label { font-size: 8px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 3px; opacity: 0.6; }
+
+  /* Input row */
+  .ai-input-row {
+    display: flex; gap: 0; border-top: 1px solid rgba(167,139,250,0.15);
+    padding: 8px 14px; gap: 8px; flex-shrink: 0;
+  }
+
+  #ai-input {
+    flex: 1; background: var(--surface); border: 1px solid rgba(167,139,250,0.2);
+    color: var(--text); font-family: 'Space Mono', monospace; font-size: 10px;
+    padding: 7px 10px; outline: none; resize: none;
+    transition: border-color 0.15s;
+    user-select: text;
+  }
+  #ai-input:focus { border-color: var(--ai); }
+  #ai-input::placeholder { color: var(--muted); font-size: 9px; }
+
+  #ai-send {
+    background: var(--ai); border: none; color: #0a0a0c;
+    font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+    padding: 0 14px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase;
+    transition: all 0.15s; flex-shrink: 0;
+  }
+  #ai-send:hover { background: #c4b5fd; }
+  #ai-send:disabled { opacity: 0.4; cursor: default; }
+
+  /* tool call flash */
+  @keyframes flashGreen {
+    0% { background: rgba(74,222,128,0.15); }
+    100% { background: transparent; }
+  }
+  .flash { animation: flashGreen 0.6s ease; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">FORGE <span>/ STL EDITOR</span> <em>+ AI COPILOT</em></div>
+  <div class="header-actions">
+    <button class="btn" onclick="document.getElementById('file-input').click()">OPEN STL</button>
+    <button class="btn" onclick="resetCamera()">RESET VIEW</button>
+    <button class="btn" id="wire-btn" onclick="toggleWireframe()">WIREFRAME</button>
+    <button class="btn" onclick="undoSculpt()" id="undo-btn" style="opacity:0.4">UNDO</button>
+    <button class="btn btn-primary" onclick="exportSTL()">EXPORT STL</button>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <button class="tool-btn active" id="tool-orbit" onclick="setTool('orbit')">↺<div class="tooltip">ORBIT [Q]</div></button>
+    <button class="tool-btn" id="tool-translate" onclick="setTool('translate')">✛<div class="tooltip">TRANSLATE [G]</div></button>
+    <button class="tool-btn" id="tool-rotate" onclick="setTool('rotate')">↻<div class="tooltip">ROTATE [R]</div></button>
+    <button class="tool-btn" id="tool-scale" onclick="setTool('scale')">⊞<div class="tooltip">SCALE [S]</div></button>
+    <div class="tool-divider"></div>
+    <button class="tool-btn" id="tool-sculpt-pull" onclick="setTool('sculpt-pull')">◉<div class="tooltip">PULL [1]</div></button>
+    <button class="tool-btn" id="tool-sculpt-push" onclick="setTool('sculpt-push')">◎<div class="tooltip">PUSH [2]</div></button>
+    <button class="tool-btn" id="tool-sculpt-smooth" onclick="setTool('sculpt-smooth')">◌<div class="tooltip">SMOOTH [3]</div></button>
+    <div class="tool-divider"></div>
+    <button class="tool-btn" onclick="centerMesh()">⊙<div class="tooltip">CENTER</div></button>
+    <button class="tool-btn" onclick="flattenBottom()">⊥<div class="tooltip">FLOOR</div></button>
+    <button class="tool-btn" onclick="flipAxis('x')">↔<div class="tooltip">FLIP X</div></button>
+    <button class="tool-btn" onclick="flipAxis('z')">↕<div class="tooltip">FLIP Z</div></button>
+    <div class="tool-divider"></div>
+    <button class="tool-btn" onclick="toggleGrid()">⊟<div class="tooltip">GRID</div></button>
+  </div>
+
+  <!-- VIEWPORT -->
+  <div id="viewport">
+    <canvas id="canvas"></canvas>
+    <div id="sculpt-cursor"></div>
+
+    <div id="drop-zone">
+      <div class="drop-icon">◈</div>
+      <div class="drop-text">DROP STL FILE</div>
+      <div class="drop-sub">OPEN THIS FILE LOCALLY IN YOUR BROWSER</div>
+      <div class="drop-browse" onclick="document.getElementById('file-input').click()">BROWSE FILES</div>
+    </div>
+
+    <div id="drop-overlay">DROP TO LOAD</div>
+    <div class="mode-badge" id="mode-badge">ORBIT</div>
+    <div id="ai-thinking-badge"><div class="ai-dot"></div>AI THINKING</div>
+    <canvas id="axis-canvas" width="80" height="80"></canvas>
+
+    <div class="viewport-info">
+      <span id="info-verts">VERTS —</span>
+      <span id="info-tris">TRIS —</span>
+      <span id="info-size">SIZE —</span>
+    </div>
+
+    <div id="loading">
+      <div class="loading-text">PARSING GEOMETRY</div>
+      <div class="loading-bar"><div class="loading-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDE -->
+  <div class="right-side">
+
+    <!-- PROPS PANEL -->
+    <div class="right-panel">
+
+      <div class="panel-section">
+        <div class="panel-title">SCULPT BRUSH</div>
+        <div class="range-row"><span>RADIUS</span><input type="range" id="brush-radius" min="0.1" max="10" step="0.05" value="1.5" oninput="updateBrush()"><span class="range-val" id="radius-val">1.50</span></div>
+        <div class="range-row"><span>STRENGTH</span><input type="range" id="brush-strength" min="0.001" max="0.3" step="0.001" value="0.04" oninput="updateBrush()"><span class="range-val" id="strength-val">0.040</span></div>
+        <div class="range-row"><span>FALLOFF</span><input type="range" id="brush-falloff" min="0.5" max="3" step="0.05" value="1.5" oninput="updateBrush()"><span class="range-val" id="falloff-val">1.50</span></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">TRANSFORM</div>
+        <div class="prop-group">
+          <div class="prop-group-label">POSITION</div>
+          <div class="prop-row"><div class="prop-label axis-x">X</div><input type="number" class="prop-input" id="pos-x" value="0" step="0.1" onchange="applyTransformInput()"></div>
+          <div class="prop-row"><div class="prop-label axis-y">Y</div><input type="number" class="prop-input" id="pos-y" value="0" step="0.1" onchange="applyTransformInput()"></div>
+          <div class="prop-row"><div class="prop-label axis-z">Z</div><input type="number" class="prop-input" id="pos-z" value="0" step="0.1" onchange="applyTransformInput()"></div>
+        </div>
+        <div class="prop-group">
+          <div class="prop-group-label">ROTATION (DEG)</div>
+          <div class="prop-row"><div class="prop-label axis-x">X</div><input type="number" class="prop-input" id="rot-x" value="0" step="1" onchange="applyTransformInput()"></div>
+          <div class="prop-row"><div class="prop-label axis-y">Y</div><input type="number" class="prop-input" id="rot-y" value="0" step="1" onchange="applyTransformInput()"></div>
+          <div class="prop-row"><div class="prop-label axis-z">Z</div><input type="number" class="prop-input" id="rot-z" value="0" step="1" onchange="applyTransformInput()"></div>
+        </div>
+        <div class="prop-group">
+          <div class="prop-group-label">UNIFORM SCALE</div>
+          <div class="range-row"><input type="range" id="uniform-scale" min="0.01" max="5" step="0.01" value="1" oninput="applyUniformScale(this.value)"><span class="range-val" id="scale-val">1.00</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">APPEARANCE</div>
+        <div class="color-row"><span style="font-size:10px;color:var(--muted)">COLOR</span><input type="color" class="color-swatch" id="mesh-color" value="#8888aa" oninput="updateMeshColor(this.value)"></div>
+        <div class="range-row" style="margin-top:10px"><span>ROUGH</span><input type="range" id="roughness" min="0" max="1" step="0.01" value="0.55" oninput="updateRoughness(this.value)"><span class="range-val" id="rough-val">0.55</span></div>
+        <div class="range-row"><span>METAL</span><input type="range" id="metalness" min="0" max="1" step="0.01" value="0.25" oninput="updateMetalness(this.value)"><span class="range-val" id="metal-val">0.25</span></div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">MESH INFO</div>
+        <div class="mesh-stat"><span>VERTICES</span><span id="stat-verts">—</span></div>
+        <div class="mesh-stat"><span>TRIANGLES</span><span id="stat-tris">—</span></div>
+        <div class="mesh-stat"><span>W × H × D</span><span id="stat-dims">—</span></div>
+        <div class="mesh-stat"><span>FILE</span><span id="stat-file">—</span></div>
+      </div>
+
+    </div>
+
+    <!-- AI COPILOT PANEL -->
+    <div class="ai-panel">
+
+      <div class="ai-header">
+        <div class="ai-title">
+          <div class="ai-status-dot" id="ai-status-dot"></div>
+          COPILOT
+        </div>
+        <span class="ai-key-toggle" onclick="toggleKeyRow()">API KEY</span>
+      </div>
+
+      <div id="api-key-row">
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
+        <button class="btn-ai" onclick="saveApiKey()">SAVE</button>
+      </div>
+
+      <div id="chat-messages">
+        <div class="msg msg-system">Enter your Anthropic API key to enable the AI copilot.</div>
+        <div class="msg msg-system" style="margin-top:4px">Try: "rotate 45 degrees on Y" · "scale to half" · "center the mesh" · "make it silver" · "flip horizontally"</div>
+      </div>
+
+      <div class="ai-input-row">
+        <textarea id="ai-input" rows="2" placeholder="Describe what to do..." disabled></textarea>
+        <button id="ai-send" onclick="sendToAI()" disabled>RUN</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".stl" style="display:none" onchange="loadSTLFile(this.files[0])">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SCENE SETUP
+// ═══════════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const viewport = document.getElementById('viewport');
+const sculptCursor = document.getElementById('sculpt-cursor');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0c);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 2000);
+camera.position.set(8, 6, 10);
+
+const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+orbitControls.enableDamping = true;
+orbitControls.dampingFactor = 0.08;
+
+const transformControls = new THREE.TransformControls(camera, renderer.domElement);
+transformControls.addEventListener('dragging-changed', e => { orbitControls.enabled = !e.value; });
+transformControls.addEventListener('change', updatePanelFromMesh);
+scene.add(transformControls);
+
+scene.add(new THREE.AmbientLight(0x222233, 2));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
+keyLight.position.set(10, 20, 10); keyLight.castShadow = true; keyLight.shadow.mapSize.set(2048, 2048);
+scene.add(keyLight);
+const fill = new THREE.DirectionalLight(0x3344ff, 0.7); fill.position.set(-10, 5, -10); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xe8ff47, 0.35); rim.position.set(0, -5, -15); scene.add(rim);
+
+const grid = new THREE.GridHelper(40, 40, 0x1e1e28, 0x151520);
+grid.material.opacity = 0.8; grid.material.transparent = true; scene.add(grid);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.25 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.001; ground.receiveShadow = true; scene.add(ground);
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let mesh = null;
+let currentTool = 'orbit';
+let wireframeMode = false;
+let gridVisible = true;
+let fileName = '';
+let undoStack = [];
+let brushRadius = 1.5, brushStrength = 0.04, brushFalloff = 1.5;
+let apiKey = localStorage.getItem('forge_api_key') || '';
+let chatHistory = [];
+let aiWorking = false;
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let lastIntersect = null;
+
+// ═══════════════════════════════════════════════════════════════
+// RESIZE + RENDER
+// ═══════════════════════════════════════════════════════════════
+function resize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function animate() {
+  requestAnimationFrame(animate);
+  orbitControls.update();
+  renderer.render(scene, camera);
+  drawAxisIndicator();
+}
+animate();
+
+// ═══════════════════════════════════════════════════════════════
+// AXIS INDICATOR
+// ═══════════════════════════════════════════════════════════════
+const axisCanvas = document.getElementById('axis-canvas');
+const axisCtx = axisCanvas.getContext('2d');
+
+function drawAxisIndicator() {
+  axisCtx.clearRect(0, 0, 80, 80);
+  const c = { x: 40, y: 40 };
+  const axes = [
+    { dir: new THREE.Vector3(1,0,0), color: '#ff5555', label: 'X' },
+    { dir: new THREE.Vector3(0,1,0), color: '#55ff88', label: 'Y' },
+    { dir: new THREE.Vector3(0,0,1), color: '#5599ff', label: 'Z' },
+  ];
+  const rot = new THREE.Matrix4().extractRotation(camera.matrixWorldInverse);
+  axes.forEach(({ dir, color, label }) => {
+    const v = dir.clone().applyMatrix4(rot);
+    const ex = c.x + v.x * 28, ey = c.y - v.y * 28;
+    axisCtx.beginPath(); axisCtx.moveTo(c.x, c.y); axisCtx.lineTo(ex, ey);
+    axisCtx.strokeStyle = color; axisCtx.lineWidth = 2; axisCtx.stroke();
+    axisCtx.fillStyle = color; axisCtx.font = 'bold 10px monospace';
+    axisCtx.fillText(label, ex - 4, ey + 4);
+  });
+  axisCtx.beginPath(); axisCtx.arc(c.x, c.y, 3, 0, Math.PI * 2);
+  axisCtx.fillStyle = '#e8e8f0'; axisCtx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOOL SWITCHING
+// ═══════════════════════════════════════════════════════════════
+const SCULPT_TOOLS = ['sculpt-pull', 'sculpt-push', 'sculpt-smooth'];
+
+function setTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + tool)?.classList.add('active');
+  const badge = document.getElementById('mode-badge');
+  const isSculpt = SCULPT_TOOLS.includes(tool);
+  canvas.className = isSculpt ? 'sculpt-mode' : (tool === 'orbit' ? 'orbit-mode' : '');
+  sculptCursor.style.display = isSculpt ? 'block' : 'none';
+  if (!mesh) return;
+  if (tool === 'translate') { transformControls.attach(mesh); transformControls.setMode('translate'); badge.textContent = 'TRANSLATE'; }
+  else if (tool === 'rotate') { transformControls.attach(mesh); transformControls.setMode('rotate'); badge.textContent = 'ROTATE'; }
+  else if (tool === 'scale') { transformControls.attach(mesh); transformControls.setMode('scale'); badge.textContent = 'SCALE'; }
+  else { transformControls.detach(); }
+  if (isSculpt) { orbitControls.enabled = false; badge.textContent = tool.replace('sculpt-','').toUpperCase(); }
+  else if (tool === 'orbit') { orbitControls.enabled = true; badge.textContent = 'ORBIT'; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCULPT
+// ═══════════════════════════════════════════════════════════════
+function updateBrush() {
+  brushRadius   = parseFloat(document.getElementById('brush-radius').value);
+  brushStrength = parseFloat(document.getElementById('brush-strength').value);
+  brushFalloff  = parseFloat(document.getElementById('brush-falloff').value);
+  document.getElementById('radius-val').textContent   = brushRadius.toFixed(2);
+  document.getElementById('strength-val').textContent = brushStrength.toFixed(3);
+  document.getElementById('falloff-val').textContent  = brushFalloff.toFixed(2);
+}
+
+function projectRadiusToScreen(pt, r) {
+  const dist = camera.position.distanceTo(pt);
+  const fov = camera.fov * Math.PI / 180;
+  return (r / (2 * dist * Math.tan(fov / 2))) * viewport.clientHeight;
+}
+
+function sculpt(event) {
+  if (!mesh) return;
+  const rect = viewport.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(mesh);
+  if (!hits.length) return;
+  lastIntersect = hits[0];
+  const hitPoint = hits[0].point.clone();
+  const hitNormal = hits[0].face.normal.clone().transformDirection(mesh.matrixWorld).normalize();
+  const posAttr = mesh.geometry.attributes.position;
+  const invMatrix = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+  const hitLocal = hitPoint.clone().applyMatrix4(invMatrix);
+  const normalLocal = hitNormal.clone().transformDirection(invMatrix).normalize();
+  const dir = currentTool === 'sculpt-push' ? -1 : 1;
+  const v = new THREE.Vector3();
+  const smoothTargets = [];
+  for (let i = 0; i < posAttr.count; i++) {
+    v.fromBufferAttribute(posAttr, i);
+    const dist = v.distanceTo(hitLocal);
+    if (dist > brushRadius) continue;
+    const t = dist / brushRadius;
+    const w = Math.exp(-brushFalloff * t * t);
+    if (currentTool === 'sculpt-smooth') { smoothTargets.push(i); }
+    else { const delta = normalLocal.clone().multiplyScalar(dir * brushStrength * w); posAttr.setXYZ(i, v.x+delta.x, v.y+delta.y, v.z+delta.z); }
+  }
+  if (currentTool === 'sculpt-smooth') {
+    smoothTargets.forEach(i => {
+      v.fromBufferAttribute(posAttr, i);
+      const t = v.distanceTo(hitLocal) / brushRadius;
+      const w = Math.exp(-brushFalloff * t * t) * brushStrength * 8;
+      posAttr.setXYZ(i, v.x+(hitLocal.x-v.x)*w, v.y+(hitLocal.y-v.y)*w, v.z+(hitLocal.z-v.z)*w);
+    });
+  }
+  posAttr.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+}
+
+let sculpting_mousedown = false, savedForUndo = false;
+canvas.addEventListener('mousemove', e => {
+  if (SCULPT_TOOLS.includes(currentTool)) {
+    const rect = viewport.getBoundingClientRect();
+    sculptCursor.style.left = (e.clientX - rect.left) + 'px';
+    sculptCursor.style.top  = (e.clientY - rect.top) + 'px';
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    if (mesh) {
+      const hits = raycaster.intersectObject(mesh);
+      if (hits.length) { const sr = projectRadiusToScreen(hits[0].point, brushRadius); sculptCursor.style.width = (sr*2)+'px'; sculptCursor.style.height = (sr*2)+'px'; }
+    }
+    if (sculpting_mousedown) { if (!savedForUndo) { saveUndoState(); savedForUndo = true; } sculpt(e); }
+  }
+});
+canvas.addEventListener('mousedown', e => { if (SCULPT_TOOLS.includes(currentTool) && e.button===0) { sculpting_mousedown=true; savedForUndo=false; } });
+canvas.addEventListener('mouseup', () => { sculpting_mousedown=false; savedForUndo=false; });
+canvas.addEventListener('mouseleave', () => { sculpting_mousedown=false; });
+
+function saveUndoState() {
+  if (!mesh) return;
+  undoStack.push(new Float32Array(mesh.geometry.attributes.position.array));
+  if (undoStack.length > 30) undoStack.shift();
+  document.getElementById('undo-btn').style.opacity = '1';
+}
+
+function undoSculpt() {
+  if (!mesh || !undoStack.length) return;
+  mesh.geometry.attributes.position.array.set(undoStack.pop());
+  mesh.geometry.attributes.position.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+  if (!undoStack.length) document.getElementById('undo-btn').style.opacity = '0.4';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STL LOADING
+// ═══════════════════════════════════════════════════════════════
+const loader = new THREE.STLLoader();
+
+function loadSTLFile(file) {
+  if (!file) return;
+  fileName = file.name;
+  document.getElementById('loading').classList.add('active');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try { addMeshToScene(loader.parse(e.target.result), file.name); }
+    catch(err) { alert('Failed to parse STL: ' + err.message); }
+    document.getElementById('loading').classList.remove('active');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function addMeshToScene(geometry, name) {
+  if (mesh) { scene.remove(mesh); transformControls.detach(); }
+  undoStack = [];
+  document.getElementById('undo-btn').style.opacity = '0.4';
+  geometry.computeVertexNormals(); geometry.computeBoundingBox(); geometry.center();
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(document.getElementById('mesh-color').value),
+    roughness: parseFloat(document.getElementById('roughness').value),
+    metalness: parseFloat(document.getElementById('metalness').value),
+    side: THREE.DoubleSide,
+  });
+  mesh = new THREE.Mesh(geometry, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+  const dist = Math.max(size.x,size.y,size.z) * 2.5;
+  camera.position.set(dist*.6, dist*.5, dist*.8);
+  orbitControls.target.set(0,0,0);
+  mesh.position.y = size.y / 2;
+  scene.add(mesh);
+  document.getElementById('drop-zone').classList.add('hidden');
+  const verts = geometry.attributes.position.count;
+  const tris = Math.round(verts/3);
+  document.getElementById('stat-verts').textContent = verts.toLocaleString();
+  document.getElementById('stat-tris').textContent  = tris.toLocaleString();
+  document.getElementById('stat-dims').textContent  = `${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)}`;
+  document.getElementById('stat-file').textContent  = name.replace('.stl','').substring(0,14);
+  document.getElementById('info-verts').textContent = 'VERTS ' + verts.toLocaleString();
+  document.getElementById('info-tris').textContent  = 'TRIS ' + tris.toLocaleString();
+  document.getElementById('info-size').textContent  = `${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)}`;
+  updatePanelFromMesh();
+  if (wireframeMode) mat.wireframe = true;
+  setTool('orbit');
+
+  // Notify AI copilot
+  addChatMsg('system', `Mesh loaded: ${name} — ${verts.toLocaleString()} verts, ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} units`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL + TRANSFORM
+// ═══════════════════════════════════════════════════════════════
+function updatePanelFromMesh() {
+  if (!mesh) return;
+  const p = mesh.position, r = mesh.rotation;
+  const d = v => (v * 180 / Math.PI).toFixed(1);
+  document.getElementById('pos-x').value = p.x.toFixed(3);
+  document.getElementById('pos-y').value = p.y.toFixed(3);
+  document.getElementById('pos-z').value = p.z.toFixed(3);
+  document.getElementById('rot-x').value = d(r.x);
+  document.getElementById('rot-y').value = d(r.y);
+  document.getElementById('rot-z').value = d(r.z);
+}
+
+function applyTransformInput() {
+  if (!mesh) return;
+  const toRad = v => parseFloat(v) * Math.PI / 180;
+  mesh.position.set(parseFloat(document.getElementById('pos-x').value), parseFloat(document.getElementById('pos-y').value), parseFloat(document.getElementById('pos-z').value));
+  mesh.rotation.set(toRad(document.getElementById('rot-x').value), toRad(document.getElementById('rot-y').value), toRad(document.getElementById('rot-z').value));
+}
+
+function applyUniformScale(val) {
+  if (!mesh) return;
+  const v = parseFloat(val);
+  mesh.scale.set(v,v,v);
+  document.getElementById('scale-val').textContent = v.toFixed(2);
+}
+
+function updateMeshColor(val) { if (mesh) mesh.material.color.set(val); }
+function updateRoughness(val) { if (mesh) mesh.material.roughness = parseFloat(val); document.getElementById('rough-val').textContent = parseFloat(val).toFixed(2); }
+function updateMetalness(val) { if (mesh) mesh.material.metalness = parseFloat(val); document.getElementById('metal-val').textContent = parseFloat(val).toFixed(2); }
+
+function toggleWireframe() {
+  if (!mesh) return;
+  wireframeMode = !wireframeMode;
+  mesh.material.wireframe = wireframeMode;
+  document.getElementById('wire-btn').classList.toggle('active', wireframeMode);
+}
+
+function toggleGrid() { gridVisible = !gridVisible; grid.visible = gridVisible; ground.visible = gridVisible; }
+
+function resetCamera() {
+  if (!mesh) { camera.position.set(8,6,10); return; }
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+  const dist = Math.max(size.x,size.y,size.z) * 2.5;
+  camera.position.set(dist*.6, dist*.5, dist*.8);
+  orbitControls.target.copy(mesh.position);
+}
+
+function centerMesh() { if (mesh) { mesh.position.set(0, mesh.position.y, 0); updatePanelFromMesh(); } }
+
+function flattenBottom() {
+  if (!mesh) return;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+  mesh.position.y = size.y / 2;
+  updatePanelFromMesh();
+}
+
+function flipAxis(axis) {
+  if (!mesh) return;
+  if (axis === 'x') mesh.scale.x *= -1;
+  else mesh.scale.z *= -1;
+}
+
+function exportSTL() {
+  if (!mesh) { alert('No mesh loaded.'); return; }
+  const exportMesh = mesh.clone();
+  exportMesh.updateMatrixWorld(true);
+  const geo = exportMesh.geometry.clone();
+  geo.applyMatrix4(exportMesh.matrixWorld);
+  const exporter = new THREE.STLExporter();
+  const result = exporter.parse(new THREE.Mesh(geo), { binary: true });
+  const blob = new Blob([result], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (fileName||'export').replace('.stl','') + '_edited.stl';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRAG AND DROP
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-overlay').classList.add('active'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget || e.relatedTarget === document.documentElement) document.getElementById('drop-overlay').classList.remove('active'); });
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('drop-overlay').classList.remove('active');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.stl')) loadSTLFile(file);
+  else if (file) alert('Please drop an STL file.');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.ctrlKey && e.key === 'z') { undoSculpt(); return; }
+  switch(e.key) {
+    case 'q': case 'Q': setTool('orbit'); break;
+    case 'g': case 'G': setTool('translate'); break;
+    case 'r': case 'R': setTool('rotate'); break;
+    case 's': case 'S': setTool('scale'); break;
+    case '1': setTool('sculpt-pull'); break;
+    case '2': setTool('sculpt-push'); break;
+    case '3': setTool('sculpt-smooth'); break;
+    case 'w': case 'W': toggleWireframe(); break;
+    case 'f': case 'F': resetCamera(); break;
+    case '[': { const el = document.getElementById('brush-radius'); el.value = Math.max(parseFloat(el.min), parseFloat(el.value)-0.2); updateBrush(); break; }
+    case ']': { const el = document.getElementById('brush-radius'); el.value = Math.min(parseFloat(el.max), parseFloat(el.value)+0.2); updateBrush(); break; }
+  }
+});
+
+// Enter to send AI message
+document.getElementById('ai-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToAI(); }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AI COPILOT
+// ═══════════════════════════════════════════════════════════════
+
+function getMeshState() {
+  if (!mesh) return { loaded: false };
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = box.getSize(new THREE.Vector3());
+  const d = v => parseFloat((v * 180 / Math.PI).toFixed(2));
+  return {
+    loaded: true,
+    fileName,
+    vertices: mesh.geometry.attributes.position.count,
+    triangles: Math.round(mesh.geometry.attributes.position.count / 3),
+    position: { x: +mesh.position.x.toFixed(3), y: +mesh.position.y.toFixed(3), z: +mesh.position.z.toFixed(3) },
+    rotation_deg: { x: d(mesh.rotation.x), y: d(mesh.rotation.y), z: d(mesh.rotation.z) },
+    scale: { x: +mesh.scale.x.toFixed(3), y: +mesh.scale.y.toFixed(3), z: +mesh.scale.z.toFixed(3) },
+    bounding_box: { width: +size.x.toFixed(3), height: +size.y.toFixed(3), depth: +size.z.toFixed(3) },
+    color_hex: '#' + mesh.material.color.getHexString(),
+    roughness: +mesh.material.roughness.toFixed(2),
+    metalness: +mesh.material.metalness.toFixed(2),
+    wireframe: wireframeMode,
+  };
+}
+
+const AI_SYSTEM_PROMPT = `You are FORGE Copilot, an AI assistant embedded in a 3D STL editor built with Three.js.
+Your job is to understand the user's intent and respond with a JSON tool call to modify the 3D mesh.
+
+AVAILABLE TOOL CALLS (respond with ONLY a JSON object, no markdown, no explanation):
+
+{ "action": "set_position", "x": number, "y": number, "z": number }
+{ "action": "set_rotation_deg", "x": number, "y": number, "z": number }
+{ "action": "set_scale", "x": number, "y": number, "z": number }
+{ "action": "set_uniform_scale", "value": number }
+{ "action": "center_mesh" }
+{ "action": "flatten_bottom" }
+{ "action": "flip_x" }
+{ "action": "flip_z" }
+{ "action": "set_color", "hex": "#rrggbb" }
+{ "action": "set_roughness", "value": 0.0–1.0 }
+{ "action": "set_metalness", "value": 0.0–1.0 }
+{ "action": "set_wireframe", "enabled": true|false }
+{ "action": "reset_camera" }
+{ "action": "multi", "actions": [ ...array of above actions... ] }
+{ "action": "none", "message": "explanation if you cannot do it" }
+
+RULES:
+- Always respond with ONLY a valid JSON object. No prose, no markdown fences.
+- For relative instructions ("rotate 45 degrees more on Y"), add the delta to the current value shown in mesh state.
+- For "half size" / "double size" etc, multiply current scale.
+- For colors, map names to hex: silver=#c0c0c0, gold=#ffd700, red=#ff3333, blue=#3366ff, white=#ffffff, black=#111111, copper=#b87333, bronze=#cd7f32, etc.
+- For "matte" set roughness=0.9 metalness=0.0; for "shiny metal" set roughness=0.1 metalness=0.9; for "plastic" set roughness=0.5 metalness=0.0
+- Use "multi" to chain multiple operations.
+- If no mesh is loaded, return { "action": "none", "message": "No mesh loaded yet." }
+- Be confident and decisive. Infer reasonable values.`;
+
+// Execute a single tool action
+function executeAction(action) {
+  const toRad = d => d * Math.PI / 180;
+  switch(action.action) {
+    case 'set_position':
+      if (!mesh) break;
+      mesh.position.set(action.x ?? mesh.position.x, action.y ?? mesh.position.y, action.z ?? mesh.position.z);
+      updatePanelFromMesh(); break;
+    case 'set_rotation_deg':
+      if (!mesh) break;
+      mesh.rotation.set(
+        toRad(action.x ?? (mesh.rotation.x * 180/Math.PI)),
+        toRad(action.y ?? (mesh.rotation.y * 180/Math.PI)),
+        toRad(action.z ?? (mesh.rotation.z * 180/Math.PI))
+      );
+      updatePanelFromMesh(); break;
+    case 'set_scale':
+      if (!mesh) break;
+      mesh.scale.set(action.x ?? mesh.scale.x, action.y ?? mesh.scale.y, action.z ?? mesh.scale.z);
+      document.getElementById('scale-val').textContent = action.x?.toFixed(2) ?? mesh.scale.x.toFixed(2);
+      break;
+    case 'set_uniform_scale':
+      if (!mesh) break;
+      mesh.scale.set(action.value, action.value, action.value);
+      document.getElementById('uniform-scale').value = action.value;
+      document.getElementById('scale-val').textContent = action.value.toFixed(2);
+      break;
+    case 'center_mesh': centerMesh(); break;
+    case 'flatten_bottom': flattenBottom(); break;
+    case 'flip_x': flipAxis('x'); break;
+    case 'flip_z': flipAxis('z'); break;
+    case 'set_color':
+      if (!mesh) break;
+      mesh.material.color.set(action.hex);
+      document.getElementById('mesh-color').value = action.hex;
+      break;
+    case 'set_roughness':
+      if (!mesh) break;
+      mesh.material.roughness = action.value;
+      document.getElementById('roughness').value = action.value;
+      document.getElementById('rough-val').textContent = action.value.toFixed(2);
+      break;
+    case 'set_metalness':
+      if (!mesh) break;
+      mesh.material.metalness = action.value;
+      document.getElementById('metalness').value = action.value;
+      document.getElementById('metal-val').textContent = action.value.toFixed(2);
+      break;
+    case 'set_wireframe':
+      if (!mesh) break;
+      wireframeMode = action.enabled;
+      mesh.material.wireframe = wireframeMode;
+      document.getElementById('wire-btn').classList.toggle('active', wireframeMode);
+      break;
+    case 'reset_camera': resetCamera(); break;
+    case 'multi':
+      if (Array.isArray(action.actions)) action.actions.forEach(executeAction);
+      break;
+    default:
+      break;
+  }
+}
+
+function describeAction(action) {
+  switch(action.action) {
+    case 'set_position': return `→ POSITION (${action.x?.toFixed(2)}, ${action.y?.toFixed(2)}, ${action.z?.toFixed(2)})`;
+    case 'set_rotation_deg': return `→ ROTATE (${action.x}°, ${action.y}°, ${action.z}°)`;
+    case 'set_scale': return `→ SCALE (${action.x}, ${action.y}, ${action.z})`;
+    case 'set_uniform_scale': return `→ SCALE × ${action.value}`;
+    case 'center_mesh': return `→ CENTER MESH`;
+    case 'flatten_bottom': return `→ FLATTEN TO FLOOR`;
+    case 'flip_x': return `→ FLIP X`;
+    case 'flip_z': return `→ FLIP Z`;
+    case 'set_color': return `→ COLOR ${action.hex}`;
+    case 'set_roughness': return `→ ROUGHNESS ${action.value}`;
+    case 'set_metalness': return `→ METALNESS ${action.value}`;
+    case 'set_wireframe': return `→ WIREFRAME ${action.enabled ? 'ON' : 'OFF'}`;
+    case 'reset_camera': return `→ RESET CAMERA`;
+    case 'multi': return (action.actions||[]).map(describeAction).join('\n');
+    default: return `→ ${action.action}`;
+  }
+}
+
+async function sendToAI() {
+  const input = document.getElementById('ai-input');
+  const userText = input.value.trim();
+  if (!userText || aiWorking) return;
+  if (!apiKey) { addChatMsg('err', 'No API key. Click API KEY above to set it.'); return; }
+
+  input.value = '';
+  addChatMsg('user', userText);
+
+  // Build messages
+  const meshState = getMeshState();
+  const systemWithState = AI_SYSTEM_PROMPT + `\n\nCURRENT MESH STATE:\n${JSON.stringify(meshState, null, 2)}`;
+
+  chatHistory.push({ role: 'user', content: userText });
+
+  setAIWorking(true);
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemWithState,
+        messages: chatHistory,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const raw = data.content?.[0]?.text?.trim() || '';
+
+    // Store assistant response in history
+    chatHistory.push({ role: 'assistant', content: raw });
+    // Keep history from growing too long
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+
+    // Parse JSON
+    let parsed;
+    try {
+      // Strip possible markdown fences
+      const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      addChatMsg('err', 'Could not parse AI response: ' + raw.substring(0, 120));
+      setAIWorking(false);
+      return;
+    }
+
+    if (parsed.action === 'none') {
+      addChatMsg('ai', parsed.message || 'I cannot do that with the current tools.');
+    } else {
+      // Flash viewport
+      canvas.classList.add('flash');
+      setTimeout(() => canvas.classList.remove('flash'), 600);
+
+      executeAction(parsed);
+      const desc = describeAction(parsed);
+      addChatMsg('exec', desc);
+    }
+
+  } catch(err) {
+    addChatMsg('err', 'API error: ' + err.message);
+  }
+
+  setAIWorking(false);
+}
+
+function setAIWorking(val) {
+  aiWorking = val;
+  document.getElementById('ai-send').disabled = val;
+  document.getElementById('ai-input').disabled = val;
+  document.getElementById('ai-thinking-badge').classList.toggle('active', val);
+}
+
+function addChatMsg(type, text) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `msg msg-${type}`;
+  if (type === 'user') {
+    div.innerHTML = `<div class="msg-label">YOU</div>${escHtml(text)}`;
+  } else if (type === 'ai') {
+    div.innerHTML = `<div class="msg-label">COPILOT</div>${escHtml(text)}`;
+  } else if (type === 'exec') {
+    div.innerHTML = `<div class="msg-label">EXECUTED</div>${escHtml(text).replace(/\n/g,'<br>')}`;
+  } else if (type === 'err') {
+    div.innerHTML = `<div class="msg-label">ERROR</div>${escHtml(text)}`;
+  } else {
+    div.textContent = text;
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── API KEY MANAGEMENT ────────────────────────────────────────
+function toggleKeyRow() {
+  const row = document.getElementById('api-key-row');
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden')) {
+    document.getElementById('api-key-input').value = apiKey;
+    document.getElementById('api-key-input').focus();
+  }
+}
+
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  apiKey = val;
+  localStorage.setItem('forge_api_key', val);
+  document.getElementById('api-key-row').classList.add('hidden');
+
+  const connected = val.startsWith('sk-ant-');
+  document.getElementById('ai-status-dot').className = 'ai-status-dot' + (connected ? ' connected' : '');
+  document.getElementById('ai-input').disabled = !connected;
+  document.getElementById('ai-send').disabled = !connected;
+
+  if (connected) {
+    addChatMsg('system', 'API key saved. Copilot ready.');
+  } else {
+    addChatMsg('err', 'Key doesn\'t look right (should start with sk-ant-)');
+  }
+}
+
+// Init: check for saved key
+if (apiKey && apiKey.startsWith('sk-ant-')) {
+  document.getElementById('ai-status-dot').className = 'ai-status-dot connected';
+  document.getElementById('ai-input').disabled = false;
+  document.getElementById('ai-send').disabled = false;
+  document.getElementById('chat-messages').innerHTML = '';
+  addChatMsg('system', 'Copilot ready. Load an STL and start describing changes.');
+  addChatMsg('system', 'Try: "rotate 45° on Y" · "make it gold and shiny" · "scale to half" · "center and flatten" · "flip horizontally"');
+}
+</script>
+</body>
+</html>
