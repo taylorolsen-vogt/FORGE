@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FORGE v3 — STL Editor + AI Copilot</title>
+  <title>FORGE — STL Editor + AI Assist</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0c'/%3E%3Cpath d='M16,2 C16,2 22,8 22,14 C22,17 20,18 18,17 C20,13 17,10 16,8 C16,8 18,14 14,17 C12,18 10,17 10,14 C10,9 16,2 16,2 Z' fill='%23ffe600'/%3E%3Cpath d='M13,17 C11,19 11,22 13,24 C14,25 15,26 16,26 C17,26 18,25 19,24 C21,22 21,19 19,17 C18,19 17,20 16,20 C15,20 14,19 13,17 Z' fill='%23ffe600'/%3E%3C/svg%3E">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
 
@@ -15,7 +16,7 @@
     }
 
     :root {
-      --bg: #0a0a0c;
+      --bg: #15151b;
       --surface: #111116;
       --border: #1e1e28;
       --accent: #e8ff47;
@@ -55,6 +56,15 @@
       font-size: 18px;
       letter-spacing: 4px;
       color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-text {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
     }
 
     .logo span {
@@ -205,6 +215,10 @@
 
     #canvas.sculpt-mode {
       cursor: none;
+    }
+
+    #canvas.crosshair-mode {
+      cursor: crosshair;
     }
 
     #drop-zone {
@@ -595,7 +609,7 @@
       background: var(--border);
     }
 
-    /* ── AI COPILOT PANEL ── */
+    /* ── SMITH PANEL ── */
     .ai-panel {
       height: 320px;
       flex-shrink: 0;
@@ -770,10 +784,9 @@
     /* Input row */
     .ai-input-row {
       display: flex;
-      gap: 0;
+      gap: 8px;
       border-top: 1px solid rgba(167, 139, 250, 0.15);
       padding: 8px 14px;
-      gap: 8px;
       flex-shrink: 0;
     }
 
@@ -844,7 +857,9 @@
 <body>
 
   <header>
-    <div class="logo">FORGE <span>/ STL EDITOR</span> <em>+ AI COPILOT</em></div>
+    <div class="logo">
+      <div class="logo-text">FORGE <span>/ STL EDITOR</span> <em>+ AI ASSIST</em></div>
+    </div>
     <div class="header-actions">
       <button class="btn" onclick="document.getElementById('file-input').click()">OPEN STL</button>
       <button class="btn" onclick="resetCamera()">RESET VIEW</button>
@@ -866,12 +881,10 @@
         </button>
       <button class="tool-btn" id="tool-scale" onclick="setTool('scale')">⊞<div class="tooltip">SCALE [S]</div></button>
       <div class="tool-divider"></div>
-      <button class="tool-btn" id="tool-sculpt-pull" onclick="setTool('sculpt-pull')">◉<div class="tooltip">PULL [1]
-        </div></button>
-      <button class="tool-btn" id="tool-sculpt-push" onclick="setTool('sculpt-push')">◎<div class="tooltip">PUSH [2]
-        </div></button>
-      <button class="tool-btn" id="tool-sculpt-smooth" onclick="setTool('sculpt-smooth')">◌<div class="tooltip">SMOOTH
-          [3]</div></button>
+      <button class="tool-btn" id="tool-sculpt-pull" onclick="setTool('sculpt-pull')">◉<div class="tooltip">PULL [1]</div></button>
+      <button class="tool-btn" id="tool-sculpt-push" onclick="setTool('sculpt-push')">◎<div class="tooltip">PUSH [2]</div></button>
+      <button class="tool-btn" id="tool-sculpt-smooth" onclick="setTool('sculpt-smooth')">◌<div class="tooltip">SMOOTH [3]</div></button>
+      <button class="tool-btn" id="tool-linked" onclick="setTool('linked')">⋈<div class="tooltip">LINKED [L]</div></button>
       <div class="tool-divider"></div>
       <button class="tool-btn" onclick="centerMesh()">⊙<div class="tooltip">CENTER</div></button>
       <button class="tool-btn" onclick="flattenBottom()">⊥<div class="tooltip">FLOOR</div></button>
@@ -879,6 +892,7 @@
       <button class="tool-btn" onclick="flipAxis('z')">↕<div class="tooltip">FLIP Z</div></button>
       <div class="tool-divider"></div>
       <button class="tool-btn" onclick="toggleGrid()">⊟<div class="tooltip">GRID</div></button>
+      <button class="tool-btn" id="tool-ruler" onclick="setTool('ruler')">⊢<div class="tooltip">RULER [M]</div></button>
     </div>
 
     <!-- VIEWPORT -->
@@ -895,6 +909,9 @@
 
       <div id="drop-overlay">DROP TO LOAD</div>
       <div class="mode-badge" id="mode-badge">ORBIT</div>
+      <div id="ruler-display" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(10,10,12,0.92);border:1px solid #ffe600;color:#ffe600;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:3px;padding:8px 20px;pointer-events:none;z-index:20;text-shadow:0 0 12px rgba(255,230,0,0.4);"></div>
+      <div id="ruler-hint" style="display:none;position:absolute;bottom:48px;left:50%;transform:translateX(-50%);background:rgba(10,10,12,0.8);border:1px solid var(--border);color:var(--muted);font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;padding:5px 12px;pointer-events:none;z-index:20;">CLICK POINT A ON MESH</div>
+      <div id="linked-hint" style="display:none;position:absolute;bottom:48px;left:50%;transform:translateX(-50%);background:rgba(10,10,12,0.9);border:1px solid var(--ai);color:var(--ai);font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;padding:5px 12px;pointer-events:none;z-index:20;">CLICK POINT A</div>
       <div id="ai-thinking-badge">
         <div class="ai-dot"></div>AI THINKING
       </div>
@@ -992,13 +1009,13 @@
 
       </div>
 
-      <!-- AI COPILOT PANEL -->
+      <!-- SMITH PANEL -->
       <div class="ai-panel">
 
         <div class="ai-header">
           <div class="ai-title">
             <div class="ai-status-dot" id="ai-status-dot"></div>
-            COPILOT
+            SMITH
           </div>
           <span class="ai-key-toggle" onclick="toggleKeyRow()">API KEY</span>
         </div>
@@ -1009,7 +1026,7 @@
         </div>
 
         <div id="chat-messages">
-          <div class="msg msg-system">Enter your Anthropic API key to enable the AI copilot.</div>
+          <div class="msg msg-system">Enter your Anthropic API key to enable the smith.</div>
           <div class="msg msg-system" style="margin-top:4px">Try: "rotate 45 degrees on Y" · "scale to half" · "center
             the mesh" · "make it silver" · "flip horizontally"</div>
         </div>
@@ -1049,6 +1066,8 @@
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0c);
 
+    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.006);
+
     const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 2000);
     camera.position.set(8, 6, 10);
 
@@ -1068,11 +1087,11 @@
     const fill = new THREE.DirectionalLight(0x3344ff, 0.7); fill.position.set(-10, 5, -10); scene.add(fill);
     const rim = new THREE.DirectionalLight(0xe8ff47, 0.35); rim.position.set(0, -5, -15); scene.add(rim);
 
-    const grid = new THREE.GridHelper(40, 40, 0x1e1e28, 0x151520);
-    grid.material.opacity = 0.8; grid.material.transparent = true; scene.add(grid);
-
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.25 }));
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.001; ground.receiveShadow = true; scene.add(ground);
+    const grid = new THREE.GridHelper(200, 200, 0x383848, 0x252535); // Adjusted to 1mm by 1mm squares with original colors
+    grid.material.transparent = true;
+    grid.material.depthWrite = false;
+    scene.add(grid);
+    let gridVisible = true;
 
     // ═══════════════════════════════════════════════════════════════
     // STATE
@@ -1080,7 +1099,6 @@
     let mesh = null;
     let currentTool = 'orbit';
     let wireframeMode = false;
-    let gridVisible = true;
     let fileName = '';
     let undoStack = [];
     let brushRadius = 1.5, brushStrength = 0.04, brushFalloff = 1.5;
@@ -1150,6 +1168,7 @@
     const SCULPT_TOOLS = ['sculpt-pull', 'sculpt-push', 'sculpt-smooth'];
 
     function setTool(tool) {
+      const prevTool = currentTool;
       currentTool = tool;
       document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('tool-' + tool)?.classList.add('active');
@@ -1157,6 +1176,26 @@
       const isSculpt = SCULPT_TOOLS.includes(tool);
       canvas.className = isSculpt ? 'sculpt-mode' : (tool === 'orbit' ? 'orbit-mode' : '');
       sculptCursor.style.display = isSculpt ? 'block' : 'none';
+      // Clear ruler if switching away
+      if (prevTool === 'ruler' && tool !== 'ruler') clearRuler();
+      // Clear linked if switching away
+      if (prevTool === 'linked' && tool !== 'linked') clearLinked();
+      if (tool === 'ruler') {
+        orbitControls.enabled = false;
+        badge.textContent = 'RULER';
+        canvas.className = 'crosshair-mode';
+        rulerReset();
+        return;
+      }
+      if (tool === 'linked') {
+        orbitControls.enabled = false;
+        badge.textContent = 'LINKED';
+        canvas.className = 'crosshair-mode';
+        clearLinked();
+        document.getElementById('linked-hint').style.display = 'block';
+        document.getElementById('linked-hint').textContent = 'CLICK POINT A';
+        return;
+      }
       if (!mesh) return;
       if (tool === 'translate') { transformControls.attach(mesh); transformControls.setMode('translate'); badge.textContent = 'TRANSLATE'; }
       else if (tool === 'rotate') { transformControls.attach(mesh); transformControls.setMode('rotate'); badge.textContent = 'ROTATE'; }
@@ -1164,6 +1203,132 @@
       else { transformControls.detach(); }
       if (isSculpt) { orbitControls.enabled = false; badge.textContent = tool.replace('sculpt-', '').toUpperCase(); }
       else if (tool === 'orbit') { orbitControls.enabled = true; badge.textContent = 'ORBIT'; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // RULER
+    // ═══════════════════════════════════════════════════════════════
+    let rulerPoints = [];      // world-space THREE.Vector3 points
+    let rulerLineObj = null;   // THREE.Line in scene
+    let rulerDotObjs = [];     // small sphere markers
+
+    function rulerReset() {
+      rulerPoints = [];
+      document.getElementById('ruler-display').style.display = 'none';
+      document.getElementById('ruler-hint').style.display = 'block';
+      document.getElementById('ruler-hint').textContent = 'CLICK POINT A ON MESH';
+    }
+
+    function clearRuler() {
+      if (rulerLineObj) { scene.remove(rulerLineObj); rulerLineObj = null; }
+      rulerDotObjs.forEach(d => scene.remove(d)); rulerDotObjs = [];
+      rulerPoints = [];
+      document.getElementById('ruler-display').style.display = 'none';
+      document.getElementById('ruler-hint').style.display = 'none';
+    }
+
+    function rulerAddDot(pt) {
+      const meshSize = mesh ? (() => { const b = new THREE.Box3().setFromObject(mesh); return b.getSize(new THREE.Vector3()).length(); })() : 10;
+      const r = meshSize * 0.008;
+      const geo = new THREE.SphereGeometry(r, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffe600, depthTest: false });
+      const dot = new THREE.Mesh(geo, mat);
+      dot.position.copy(pt);
+      dot.renderOrder = 999;
+      scene.add(dot);
+      rulerDotObjs.push(dot);
+    }
+
+    function rulerDrawLine() {
+      if (rulerLineObj) { scene.remove(rulerLineObj); rulerLineObj = null; }
+      if (rulerPoints.length < 2) return;
+      const geo = new THREE.BufferGeometry().setFromPoints(rulerPoints);
+      const mat = new THREE.LineBasicMaterial({ color: 0xffe600, depthTest: false, linewidth: 2 });
+      rulerLineObj = new THREE.Line(geo, mat);
+      rulerLineObj.renderOrder = 998;
+      scene.add(rulerLineObj);
+    }
+
+    function rulerShowDistance() {
+      if (rulerPoints.length < 2) return;
+      const dist = rulerPoints[0].distanceTo(rulerPoints[1]);
+      document.getElementById('ruler-display').textContent = `${dist.toFixed(2)} mm`;
+      document.getElementById('ruler-display').style.display = 'block';
+      document.getElementById('ruler-hint').textContent = 'CLICK TO MEASURE AGAIN  ·  Q TO EXIT';
+    }
+
+    canvas.addEventListener('click', e => {
+      if (currentTool !== 'ruler' || !mesh) return;
+      const rect = viewport.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(mesh);
+      if (!hits.length) return;
+      const pt = hits[0].point.clone();
+
+      if (rulerPoints.length >= 2) {
+        clearRuler();
+        rulerPoints = [];
+        document.getElementById('ruler-hint').style.display = 'block';
+        document.getElementById('ruler-hint').textContent = 'CLICK POINT A ON MESH';
+      }
+
+      rulerPoints.push(pt);
+      rulerAddDot(pt);
+
+      if (rulerPoints.length === 1) {
+        document.getElementById('ruler-hint').textContent = 'CLICK POINT B ON MESH';
+      } else if (rulerPoints.length === 2) {
+        rulerDrawLine();
+        rulerShowDistance();
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // LINKED TOOL
+    // ═══════════════════════════════════════════════════════════════
+    let linkedAnchors = [], linkedAnchorLocals = [], linkedDotObjs = [];
+    let linkedLineObj = null, linkedDragging = false, linkedDragStartLocal = null;
+
+    function clearLinked() {
+      linkedDotObjs.forEach(d => scene.remove(d)); linkedDotObjs = [];
+      if (linkedLineObj) { scene.remove(linkedLineObj); linkedLineObj = null; }
+      linkedAnchors = []; linkedAnchorLocals = [];
+      linkedDragging = false; linkedDragStartLocal = null;
+      document.getElementById('linked-hint').style.display = 'none';
+    }
+
+    function linkedAddDot(pt, color) {
+      const b = new THREE.Box3().setFromObject(mesh);
+      const r = b.getSize(new THREE.Vector3()).length() * 0.01;
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+      dot.position.copy(pt); dot.renderOrder = 999;
+      scene.add(dot); linkedDotObjs.push(dot);
+    }
+
+    function linkedDrawConnector() {
+      if (linkedLineObj) { scene.remove(linkedLineObj); linkedLineObj = null; }
+      const geo = new THREE.BufferGeometry().setFromPoints(linkedAnchors);
+      linkedLineObj = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xa78bfa, depthTest: false }));
+      linkedLineObj.renderOrder = 998; scene.add(linkedLineObj);
+    }
+
+    function applyLinkedSculpt(deltaLocal) {
+      const posAttr = mesh.geometry.attributes.position;
+      const v = new THREE.Vector3();
+      linkedAnchorLocals.forEach(anchorLocal => {
+        for (let i = 0; i < posAttr.count; i++) {
+          v.fromBufferAttribute(posAttr, i);
+          const dist = v.distanceTo(anchorLocal);
+          if (dist > brushRadius) continue;
+          const t = dist / brushRadius;
+          const w = Math.exp(-brushFalloff * t * t);
+          posAttr.setXYZ(i, v.x + deltaLocal.x * w, v.y + deltaLocal.y * w, v.z + deltaLocal.z * w);
+        }
+      });
+      linkedAnchorLocals = linkedAnchorLocals.map(a => a.clone().add(deltaLocal));
+      posAttr.needsUpdate = true;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1184,46 +1349,69 @@
       return (r / (2 * dist * Math.tan(fov / 2))) * viewport.clientHeight;
     }
 
-    function sculpt(event) {
+    let lastBrushLocal = null;
+    function sculpt(event, overrideHitPoint, overrideNormalLocal) {
       if (!mesh) return;
-      const rect = viewport.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const hits = raycaster.intersectObject(mesh);
-      if (!hits.length) return;
-      lastIntersect = hits[0];
-      const hitPoint = hits[0].point.clone();
-      const hitNormal = hits[0].face.normal.clone().transformDirection(mesh.matrixWorld).normalize();
+      let hitPoint, normalLocal;
       const posAttr = mesh.geometry.attributes.position;
       const invMatrix = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+
+      if (overrideHitPoint) {
+        hitPoint = overrideHitPoint;
+        normalLocal = overrideNormalLocal;
+      } else {
+        const rect = viewport.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObject(mesh);
+        if (!hits.length) return;
+        lastIntersect = hits[0];
+        hitPoint = hits[0].point.clone();
+        const hn = hits[0].face.normal.clone().transformDirection(mesh.matrixWorld).normalize();
+        normalLocal = hn.clone().transformDirection(invMatrix).normalize();
+      }
       const hitLocal = hitPoint.clone().applyMatrix4(invMatrix);
-      const normalLocal = hitNormal.clone().transformDirection(invMatrix).normalize();
       const dir = currentTool === 'sculpt-push' ? -1 : 1;
       const v = new THREE.Vector3();
-      const smoothTargets = [];
-      for (let i = 0; i < posAttr.count; i++) {
-        v.fromBufferAttribute(posAttr, i);
-        const dist = v.distanceTo(hitLocal);
-        if (dist > brushRadius) continue;
-        const t = dist / brushRadius;
-        const w = Math.exp(-brushFalloff * t * t);
-        if (currentTool === 'sculpt-smooth') { smoothTargets.push(i); }
-        else { const delta = normalLocal.clone().multiplyScalar(dir * brushStrength * w); posAttr.setXYZ(i, v.x + delta.x, v.y + delta.y, v.z + delta.z); }
+
+      // Fill gaps when moving fast
+      const positions = [hitLocal.clone()];
+      if (lastBrushLocal) {
+        const gap = lastBrushLocal.distanceTo(hitLocal);
+        const steps = Math.ceil(gap / (brushRadius * 0.15));
+        for (let s = 1; s < steps; s++)
+          positions.unshift(lastBrushLocal.clone().lerp(hitLocal, s / steps));
       }
-      if (currentTool === 'sculpt-smooth') {
-        smoothTargets.forEach(i => {
+      lastBrushLocal = hitLocal.clone();
+
+      positions.forEach(brushPos => {
+        const smoothTargets = [];
+        for (let i = 0; i < posAttr.count; i++) {
           v.fromBufferAttribute(posAttr, i);
-          const t = v.distanceTo(hitLocal) / brushRadius;
-          const w = Math.exp(-brushFalloff * t * t) * brushStrength * 8;
-          posAttr.setXYZ(i, v.x + (hitLocal.x - v.x) * w, v.y + (hitLocal.y - v.y) * w, v.z + (hitLocal.z - v.z) * w);
-        });
-      }
+          const dist = v.distanceTo(brushPos);
+          if (dist > brushRadius) continue;
+          const t = dist / brushRadius;
+          const w = Math.exp(-brushFalloff * t * t);
+          if (currentTool === 'sculpt-smooth') { smoothTargets.push(i); }
+          else { const delta = normalLocal.clone().multiplyScalar(dir * brushStrength * w); posAttr.setXYZ(i, v.x + delta.x, v.y + delta.y, v.z + delta.z); }
+        }
+        if (currentTool === 'sculpt-smooth') {
+          smoothTargets.forEach(i => {
+            v.fromBufferAttribute(posAttr, i);
+            const t = v.distanceTo(brushPos) / brushRadius;
+            const w = Math.exp(-brushFalloff * t * t) * brushStrength * 8;
+            posAttr.setXYZ(i, v.x + (brushPos.x - v.x) * w, v.y + (brushPos.y - v.y) * w, v.z + (brushPos.z - v.z) * w);
+          });
+        }
+      });
       posAttr.needsUpdate = true;
-      mesh.geometry.computeVertexNormals();
     }
 
     let sculpting_mousedown = false, savedForUndo = false;
+    let lastHitPoint = null, lastNormalLocal = null;
+
+    // Sculpt cursor + sculpt stroke
     canvas.addEventListener('mousemove', e => {
       if (SCULPT_TOOLS.includes(currentTool)) {
         const rect = viewport.getBoundingClientRect();
@@ -1234,14 +1422,101 @@
         raycaster.setFromCamera(mouse, camera);
         if (mesh) {
           const hits = raycaster.intersectObject(mesh);
-          if (hits.length) { const sr = projectRadiusToScreen(hits[0].point, brushRadius); sculptCursor.style.width = (sr * 2) + 'px'; sculptCursor.style.height = (sr * 2) + 'px'; }
+          if (hits.length) {
+            const sr = projectRadiusToScreen(hits[0].point, brushRadius);
+            sculptCursor.style.width = (sr * 2) + 'px';
+            sculptCursor.style.height = (sr * 2) + 'px';
+            if (sculpting_mousedown) {
+              lastHitPoint = hits[0].point.clone();
+              const invMatrix = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+              const hn = hits[0].face.normal.clone().transformDirection(mesh.matrixWorld).normalize();
+              lastNormalLocal = hn.clone().transformDirection(invMatrix).normalize();
+            }
+          } else if (sculpting_mousedown && lastHitPoint) {
+            // Missed mesh — project onto view plane at last hit depth
+            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+              camera.getWorldDirection(new THREE.Vector3()), lastHitPoint
+            );
+            const projected = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, projected);
+            if (projected) lastHitPoint = projected;
+          }
+          if (sculpting_mousedown) {
+            if (!savedForUndo) { saveUndoState(); savedForUndo = true; }
+            sculpt(e, lastHitPoint, lastNormalLocal);
+          }
         }
-        if (sculpting_mousedown) { if (!savedForUndo) { saveUndoState(); savedForUndo = true; } sculpt(e); }
       }
     });
-    canvas.addEventListener('mousedown', e => { if (SCULPT_TOOLS.includes(currentTool) && e.button === 0) { sculpting_mousedown = true; savedForUndo = false; } });
-    canvas.addEventListener('mouseup', () => { sculpting_mousedown = false; savedForUndo = false; });
-    canvas.addEventListener('mouseleave', () => { sculpting_mousedown = false; });
+
+    // Linked drag
+    canvas.addEventListener('mousemove', e => {
+      if (currentTool === 'linked' && linkedDragging && linkedDragStartLocal && mesh) {
+        const rect = viewport.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObject(mesh);
+        if (hits.length) {
+          const inv = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+          const curLocal = hits[0].point.clone().applyMatrix4(inv);
+          const deltaLocal = curLocal.clone().sub(linkedDragStartLocal);
+          applyLinkedSculpt(deltaLocal);
+          linkedDragStartLocal = curLocal;
+          linkedAnchors = linkedAnchorLocals.map(l => l.clone().applyMatrix4(mesh.matrixWorld));
+          linkedDotObjs.forEach((d, i) => { if (linkedAnchors[i]) d.position.copy(linkedAnchors[i]); });
+          if (linkedLineObj) { linkedLineObj.geometry.setFromPoints(linkedAnchors); linkedLineObj.geometry.attributes.position.needsUpdate = true; }
+        }
+      }
+    });
+
+    canvas.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      if (SCULPT_TOOLS.includes(currentTool)) {
+        sculpting_mousedown = true; savedForUndo = false; lastBrushLocal = null; lastHitPoint = null; lastNormalLocal = null;
+      }
+      if (currentTool === 'linked' && mesh) {
+        const rect = viewport.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObject(mesh);
+        if (!hits.length) return;
+        const inv = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+        if (linkedAnchors.length === 2) {
+          saveUndoState();
+          linkedDragging = true;
+          linkedDragStartLocal = hits[0].point.clone().applyMatrix4(inv);
+          document.getElementById('linked-hint').textContent = 'DRAG TO DEFORM · RELEASE TO COMMIT';
+        } else {
+          const pt = hits[0].point.clone();
+          linkedAnchors.push(pt);
+          linkedAnchorLocals.push(pt.clone().applyMatrix4(inv));
+          linkedAddDot(pt, linkedAnchors.length === 1 ? 0xffe600 : 0xa78bfa);
+          if (linkedAnchors.length === 1) document.getElementById('linked-hint').textContent = 'CLICK POINT B';
+          else { linkedDrawConnector(); document.getElementById('linked-hint').textContent = 'NOW DRAG TO DEFORM BOTH POINTS'; }
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (sculpting_mousedown && mesh) mesh.geometry.computeVertexNormals();
+      sculpting_mousedown = false; savedForUndo = false; lastBrushLocal = null; lastHitPoint = null; lastNormalLocal = null;
+      if (linkedDragging && mesh) {
+        mesh.geometry.computeVertexNormals();
+        linkedDragging = false; linkedDragStartLocal = null;
+        linkedDotObjs.forEach(d => scene.remove(d)); linkedDotObjs = [];
+        if (linkedLineObj) { scene.remove(linkedLineObj); linkedLineObj = null; }
+        linkedAnchors = []; linkedAnchorLocals = [];
+        document.getElementById('linked-hint').textContent = 'CLICK POINT A';
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (sculpting_mousedown && mesh) mesh.geometry.computeVertexNormals();
+      sculpting_mousedown = false; lastBrushLocal = null;
+      if (linkedDragging && mesh) { mesh.geometry.computeVertexNormals(); linkedDragging = false; }
+    });
 
     function saveUndoState() {
       if (!mesh) return;
@@ -1309,8 +1584,8 @@
       if (wireframeMode) mat.wireframe = true;
       setTool('orbit');
 
-      // Notify AI copilot
-      addChatMsg('system', `Mesh loaded: ${name} — ${verts.toLocaleString()} verts, ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)} units`);
+      // Notify smith
+      addChatMsg('system', `Mesh loaded: ${name} — ${verts.toLocaleString()} verts, ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)}`);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1353,7 +1628,7 @@
       document.getElementById('wire-btn').classList.toggle('active', wireframeMode);
     }
 
-    function toggleGrid() { gridVisible = !gridVisible; grid.visible = gridVisible; ground.visible = gridVisible; }
+    function toggleGrid() { gridVisible = !gridVisible; grid.visible = gridVisible; }
 
     function resetCamera() {
       if (!mesh) { camera.position.set(8, 6, 10); return; }
@@ -1422,6 +1697,8 @@
         case '1': setTool('sculpt-pull'); break;
         case '2': setTool('sculpt-push'); break;
         case '3': setTool('sculpt-smooth'); break;
+        case 'l': case 'L': setTool('linked'); break;
+        case 'm': case 'M': setTool('ruler'); break;
         case 'w': case 'W': toggleWireframe(); break;
         case 'f': case 'F': resetCamera(); break;
         case '[': { const el = document.getElementById('brush-radius'); el.value = Math.max(parseFloat(el.min), parseFloat(el.value) - 0.2); updateBrush(); break; }
@@ -1435,7 +1712,7 @@
     });
 
     // ═══════════════════════════════════════════════════════════════
-    // AI COPILOT
+    // SMITH
     // ═══════════════════════════════════════════════════════════════
 
     function getMeshState() {
@@ -1459,7 +1736,7 @@
       };
     }
 
-    const AI_SYSTEM_PROMPT = `You are FORGE Copilot, an AI assistant embedded in a 3D STL editor built with Three.js.
+    const AI_SYSTEM_PROMPT = `You are Smith, an AI assistant embedded in a 3D STL editor built with Three.js.
 Your job is to understand the user's intent and respond with a JSON tool call to modify the 3D mesh.
 
 AVAILABLE TOOL CALLS (respond with ONLY a JSON object, no markdown, no explanation):
@@ -1665,7 +1942,7 @@ RULES:
       if (type === 'user') {
         div.innerHTML = `<div class="msg-label">YOU</div>${escHtml(text)}`;
       } else if (type === 'ai') {
-        div.innerHTML = `<div class="msg-label">COPILOT</div>${escHtml(text)}`;
+        div.innerHTML = `<div class="msg-label">SMITH</div>${escHtml(text)}`;
       } else if (type === 'exec') {
         div.innerHTML = `<div class="msg-label">EXECUTED</div>${escHtml(text).replace(/\n/g, '<br>')}`;
       } else if (type === 'err') {
@@ -1703,7 +1980,7 @@ RULES:
       document.getElementById('ai-send').disabled = !connected;
 
       if (connected) {
-        addChatMsg('system', 'API key saved. Copilot ready.');
+        addChatMsg('system', 'API key saved. Smith ready.');
       } else {
         addChatMsg('err', 'Key doesn\'t look right (should start with sk-ant-)');
       }
@@ -1715,7 +1992,7 @@ RULES:
       document.getElementById('ai-input').disabled = false;
       document.getElementById('ai-send').disabled = false;
       document.getElementById('chat-messages').innerHTML = '';
-      addChatMsg('system', 'Copilot ready. Load an STL and start describing changes.');
+      addChatMsg('system', 'Smith ready. Load an STL and start describing changes.');
       addChatMsg('system', 'Try: "rotate 45° on Y" · "make it gold and shiny" · "scale to half" · "center and flatten" · "flip horizontally"');
     }
   </script>
